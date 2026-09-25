@@ -10,8 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Download Google XLS Development Packages completely during build
 RUN mkdir -p /opt/xls && \
-    XLS_VERSION=$(curl -s https://github.com | grep -oP '"tag_name": "\K[^"]+') && \
-    curl -L https://github.com{XLS_VERSION}/xls-${XLS_VERSION}-linux-x86_64.tar.gz | tar -xzC /opt/xls --strip-components=1
+    XLS_VERSION=$(curl -s https://api.github.com/repos/google/xls/releases/latest | grep -oP '"tag_name": "\K[^"]+') && \
+    curl -L https://github.com/google/xls/download/{XLS_VERSION}/xls-${XLS_VERSION}-linux-x86_64.tar.gz | tar -xzC /opt/xls --strip-components=1
 
 # ==============================================================================
 # STAGE 2: Final integrated EDA image
