@@ -87,7 +87,8 @@ USER slam
 WORKDIR /workspace
 
 # ---------------- finish as the user/workspace the runtime expects ----------------
-ENV PATH="${OpenROAD_FLOW_ROOT}/tools/install/OpenROAD/bin:/OpenROAD-flow-scripts/tools/install/yosys/bin:/opt/xls:${PATH}"
+ENV OpenROAD_FLOW_ROOT=/OpenROAD-flow-scripts
+ENV PATH="/OpenROAD-flow-scripts/tools/install/OpenROAD/bin:/OpenROAD-flow-scripts/tools/install/yosys/bin:/opt/xls:${PATH}"
 
 RUN interpreter_main --version || echo "XLS DSLX interpreter ready."
 RUN yosys -V
