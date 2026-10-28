@@ -1,8 +1,6 @@
 name: Build and Package EDA Image for Chrome Download
 
 on:
-  push:
-    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
