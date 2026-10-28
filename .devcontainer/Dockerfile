@@ -39,22 +39,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     iverilog \
     vim \
+    verilator \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy prebuilt Google XLS Package from fetcher stage
 COPY --from=fetcher /opt/xls /opt/xls
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-
-# Build Verilator from source
-RUN git clone https://github.com/verilator/verilator /tmp/verilator && \
-    cd /tmp/verilator && \
-    git checkout v5.028 && \
-    autoconf && \
-    ./configure --prefix=/usr/local && \
-    make -j$(nproc) && \
-    make install && \
-    rm -rf /tmp/verilator
 
 # 1. Point Ubuntu APT sources at the Huawei internal mirror (Ubuntu 24.04+ and older).
 RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
@@ -86,7 +77,21 @@ RUN git config --system user.email "steve.lam@huawei.com" && \
 ENV UV_INDEX_URL="http://mirrors.tools.huawei.com/pypi/simple"
 ENV UV_INSECURE_HTTP=true
 
-# ---------------- finish as the user/workspace the runtime expects ----------------
-ENV PATH="/opt/xls/bin:${PATH}"
+RUN useradd -m -s /bin/bash slam \
+    && usermod -aG sudo slam \
+    && echo "slam ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && mkdir -p /workspace \
+    && chown -R slam:slam /workspace
+
+USER slam
 WORKDIR /workspace
 
+# ---------------- finish as the user/workspace the runtime expects ----------------
+ENV PATH="${OpenROAD_FLOW_ROOT}/tools/install/OpenROAD/bin:/opt/xls:${PATH}"
+
+RUN interpreter_main --version || echo "XLS DSLX interpreter ready."
+RUN yosys -V
+RUN openroad -version
+RUN ls /OpenROAD-flow-scripts/flow/platforms/asap7 && echo "ASAP7 system structural integrity verified."
+
+CMD ["/bin/bash"]
