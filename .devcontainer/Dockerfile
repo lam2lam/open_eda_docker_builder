@@ -40,6 +40,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iverilog \
     vim \
     verilator \
+    nano \
+    sudo \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy prebuilt Google XLS Package from fetcher stage
