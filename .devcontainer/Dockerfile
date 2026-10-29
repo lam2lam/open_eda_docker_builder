@@ -18,7 +18,7 @@ RUN mkdir -p /opt/xls && \
 # ==============================================================================
 # Using the official OpenROAD Flow Scripts image as base
 FROM openroad/orfs:latest AS openroad_source
-FROM ucbbar/chipyard-image:1.11.0
+FROM ghcr.io/ucb-bar/chipyard:main
 
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
