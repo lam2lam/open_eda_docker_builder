@@ -63,31 +63,10 @@ RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
     fi
 
 
-RUN ORIGINAL_HOME=$(find /home -maxdepth 1 -mindepth 1 -type d | head -n 1) && \
-    echo "Original base home directory discovered at: ${ORIGINAL_HOME}" && \
-    # 创建 slam 用户，直接将其家目录指定为这个现有的、带有全套开发环境的目录
-    useradd -d ${ORIGINAL_HOME} -M -s /bin/bash slam && \
-    usermod -aG sudo slam && \
-    echo "slam ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
-    # 将整个原有生态目录、OpenROAD 管道以及工作区的属主全部变更为 slam
-    chown -R slam:slam ${ORIGINAL_HOME} && \
-    chown -R slam:slam /OpenROAD-flow-scripts
+RUN ORIGINAL_HOME=$(find /home -maxdepth 1 -mindepth 1 -type d | head -n 1)
     
-USER slam
+USER ubuntu
 WORKDIR ${ORIGINAL_HOME}
-
-RUN CHIPYARD_DIR=$(find /home -name "init-vlsi.sh" | head -n 1 | sed 's/\/scripts\/init-vlsi.sh//') && \
-    echo "Configuring Chipyard inside: ${CHIPYARD_DIR}" && \
-    cd ${CHIPYARD_DIR} && \
-    # 执行初始化脚本（现在 slam 拥有绝对修改权限，不会再报 .bash_profile 错误）
-    ./scripts/init-vlsi.sh asap7 && \
-    # 唤醒镜像自带的本地 Conda 环境并注册 hammer
-    source /opt/conda/etc/profile.d/conda.sh && \
-    conda activate base && \
-    pip install --upgrade pip && \
-    pip install hammer-vlsi[asap7-gdstk] && \
-    cd vlsi/hammer && \
-    python setup.py develop
 
 # 2. Global pip Huawei internal mirror.
 RUN pip3 config --global set global.index http://mirrors.tools.huawei.com/pypi && \
@@ -119,6 +98,5 @@ RUN openroad -version
 RUN java -version
 RUN sbt sbtVersion
 RUN ls /OpenROAD-flow-scripts/flow/platforms/asap7 && echo "ASAP7 system structural integrity verified."
-RUN /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate base && hammer-vlsi -h"
 
 CMD ["/bin/bash"]
