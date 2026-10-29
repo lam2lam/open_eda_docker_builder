@@ -17,7 +17,6 @@ RUN mkdir -p /opt/xls && \
 # STAGE 2: Final integrated EDA image
 # ==============================================================================
 # Using the official OpenROAD Flow Scripts image as base
-FROM openroad/orfs:latest AS openroad_source
 FROM ghcr.io/ucb-bar/chipyard:main
 
 USER root
@@ -26,6 +25,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install system compilation and runtime utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tcl8.6 \
+    curl \
     tcl8.6-dev \
     tk8.6 \
     tk8.6-dev \
@@ -54,7 +54,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-COPY --from=openroad_source /OpenROAD-flow-scripts /OpenROAD-flow-scripts
+# building openroad:
+RUN curl -L https://vaultlink.precisioninno.com/api/releases/26Q2-1164-g08f67ee5ec/openroad_26Q2-1164-g08f67ee5ec_amd64-ubuntu-22.04.deb/download -o /tmp/openroad_26Q2-1164-g08f67ee5ec_amd64-ubuntu-22.04.deb && \
+    apt install /tmp/openroad_26Q2-1164-g08f67ee5ec_amd64-ubuntu-22.04.deb && \
+    curl -L https://www.klayout.org/downloads/Ubuntu-22/klayout_0.30.12-1_amd64.deb -o /tmp/klayout_0.30.12-1_amd64.deb && \
+    apt install /tmp/klayout_0.30.12-1_amd64.deb && \
+    curl -L https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2026-10-29/oss-cad-suite-linux-x64-20261029.tgz  -o /tmp/oss-cad-suite-linux-x64-20261029.tgz && \
+    tar -xvzf /tmp/oss-cad-suite-linux-x64-20261029.tgz -C / && \
+    rm -f /tmp/*
+ENV PATH="/oss-cad-suite/bin:${PATH}"
+
+RUN git clone https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts.git / && \
+    cd /OpenROAD-flow-scripts/flow && \
+    OPENROAD_EXE=$(command -v openroad) && \
+    YOSYS_EXE=$(command -v yosys) && \
+    yosys -help && \
+    yosys -m slang -p "slang_version" && \
+    openroad -help && \
+    make && \
+    make gui_final
 
 # Copy prebuilt Google XLS Package from fetcher stage
 COPY --from=fetcher /opt/xls /opt/xls
@@ -70,7 +88,6 @@ RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
       sed -i "s@http://.*archive.ubuntu.com@http://mirrors.tools.huawei.com@g" /etc/apt/sources.list && \
       sed -i "s@http://.*security.ubuntu.com@http://mirrors.tools.huawei.com@g" /etc/apt/sources.list; \
     fi
-
 
 RUN ORIGINAL_HOME=$(find /home -maxdepth 1 -mindepth 1 -type d | head -n 1)
     
@@ -98,11 +115,9 @@ ENV UV_INSECURE_HTTP=true
 
 # ---------------- finish as the user/workspace the runtime expects ----------------
 ENV OpenROAD_FLOW_ROOT=/OpenROAD-flow-scripts
-ENV PATH="/OpenROAD-flow-scripts/tools/install/OpenROAD/bin:/OpenROAD-flow-scripts/tools/install/yosys/bin:/opt/xls:${PATH}"
+ENV PATH="/opt/xls:${PATH}"
 
 RUN interpreter_main --version || echo "XLS DSLX interpreter ready."
-RUN yosys -V
-RUN openroad -version
 RUN java -version
 RUN sbt sbtVersion
 RUN ls /OpenROAD-flow-scripts/flow/platforms/asap7 && echo "ASAP7 system structural integrity verified."
