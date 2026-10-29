@@ -17,7 +17,8 @@ RUN mkdir -p /opt/xls && \
 # STAGE 2: Final integrated EDA image
 # ==============================================================================
 # Using the official OpenROAD Flow Scripts image as base
-FROM openroad/orfs:latest
+FROM openroad/orfs:latest AS openroad_source
+FROM ucbbar/chipyard-image:1.11.0
 
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
@@ -43,6 +44,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nano \
     sudo \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY --from=openroad_source /OpenROAD-flow-scripts /OpenROAD-flow-scripts
 
 # Copy prebuilt Google XLS Package from fetcher stage
 COPY --from=fetcher /opt/xls /opt/xls
@@ -86,6 +89,16 @@ RUN useradd -m -s /bin/bash slam \
     && chown -R slam:slam /workspace
 
 USER slam
+
+WORKDIR /opt/chipyard
+RUN ./scripts/init-vlsi.sh asap7
+RUN /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
+    conda activate base && \
+    pip install --upgrade pip && \
+    pip install hammer-vlsi[asap7-gdstk] && \
+    cd /opt/chipyard/vlsi/hammer && \
+    python setup.py develop"
+    
 WORKDIR /workspace
 
 # ---------------- finish as the user/workspace the runtime expects ----------------
@@ -95,6 +108,9 @@ ENV PATH="/OpenROAD-flow-scripts/tools/install/OpenROAD/bin:/OpenROAD-flow-scrip
 RUN interpreter_main --version || echo "XLS DSLX interpreter ready."
 RUN yosys -V
 RUN openroad -version
+RUN java -version
+RUN sbt sbtVersion
 RUN ls /OpenROAD-flow-scripts/flow/platforms/asap7 && echo "ASAP7 system structural integrity verified."
+RUN /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate base && hammer-vlsi -h"
 
 CMD ["/bin/bash"]
