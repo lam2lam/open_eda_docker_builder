@@ -66,7 +66,6 @@ RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
 RUN ORIGINAL_HOME=$(find /home -maxdepth 1 -mindepth 1 -type d | head -n 1)
     
 USER ubuntu
-WORKDIR ${ORIGINAL_HOME}
 
 # 2. Global pip Huawei internal mirror.
 RUN pip3 config --global set global.index http://mirrors.tools.huawei.com/pypi && \
