@@ -62,6 +62,24 @@ RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
       sed -i "s@http://.*security.ubuntu.com@http://mirrors.tools.huawei.com@g" /etc/apt/sources.list; \
     fi
 
+
+RUN useradd -m -s /bin/bash slam \
+    && usermod -aG sudo slam \
+    && echo "slam ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && mkdir -p /workspace \
+    && chown -R slam:slam /workspace
+
+USER slam
+
+WORKDIR /opt/chipyard
+RUN ./scripts/init-vlsi.sh asap7
+RUN /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
+    conda activate base && \
+    pip install --upgrade pip && \
+    pip install hammer-vlsi[asap7-gdstk] && \
+    cd /opt/chipyard/vlsi/hammer && \
+    python setup.py develop"
+
 # 2. Global pip Huawei internal mirror.
 RUN pip3 config --global set global.index http://mirrors.tools.huawei.com/pypi && \
     pip3 config --global set global.index-url http://mirrors.tools.huawei.com/pypi/simple && \
@@ -82,23 +100,6 @@ RUN git config --system user.email "steve.lam@huawei.com" && \
 ENV UV_INDEX_URL="http://mirrors.tools.huawei.com/pypi/simple"
 ENV UV_INSECURE_HTTP=true
 
-RUN useradd -m -s /bin/bash slam \
-    && usermod -aG sudo slam \
-    && echo "slam ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
-    && mkdir -p /workspace \
-    && chown -R slam:slam /workspace
-
-USER slam
-
-WORKDIR /opt/chipyard
-RUN ./scripts/init-vlsi.sh asap7
-RUN /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
-    conda activate base && \
-    pip install --upgrade pip && \
-    pip install hammer-vlsi[asap7-gdstk] && \
-    cd /opt/chipyard/vlsi/hammer && \
-    python setup.py develop"
-    
 WORKDIR /workspace
 
 # ---------------- finish as the user/workspace the runtime expects ----------------
