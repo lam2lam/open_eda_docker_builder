@@ -24,12 +24,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system compilation and runtime utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    tcl8.6 \
     curl \
-    tcl8.6-dev \
-    tk8.6 \
-    tk8.6-dev \
-    libtcl8.6 \
     libnuma1 \
     libgomp1 \
     libpython3.10 \
