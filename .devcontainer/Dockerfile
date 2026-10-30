@@ -113,8 +113,8 @@ ENV OpenROAD_FLOW_ROOT=/OpenROAD-flow-scripts
 ENV PATH="/opt/xls:${PATH}"
 
 RUN interpreter_main --version || echo "XLS DSLX interpreter ready."
-RUN java -version
-RUN sbt sbtVersion
+#RUN java -version
+#RUN sbt sbtVersion
 #RUN ls /OpenROAD-flow-scripts/flow/platforms/asap7 && echo "ASAP7 system structural integrity verified."
 
 CMD ["/bin/bash"]
