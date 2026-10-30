@@ -24,7 +24,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system compilation and runtime utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpython3.10 libqt5charts5 libyaml-cpp0.7 tcl-tclreadline \
     tcl8.6 \
     curl \
     tcl8.6-dev \
