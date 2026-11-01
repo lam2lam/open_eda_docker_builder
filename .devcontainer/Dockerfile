@@ -1,30 +1,16 @@
 # ==============================================================================
-# STAGE 1: Download and verify assets via GitHub runners
-# ==============================================================================
-FROM ubuntu:24.04 AS fetcher
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    tar \
-    && rm -rf /var/lib/apt/lists/*
-
-# Download Google XLS Development Packages completely during build
-RUN mkdir -p /opt/xls && \
-    XLS_VERSION=$(curl -s https://api.github.com/repos/google/xls/releases/latest | grep -oP '"tag_name": "\K[^"]+') && \
-    curl -L https://github.com/google/xls/releases/download/${XLS_VERSION}/xls-${XLS_VERSION}-linux-x64.tar.gz | tar -xzC /opt/xls --strip-components=1
-
-# ==============================================================================
 # STAGE 2: Final integrated EDA image
 # ==============================================================================
 # Using the official OpenROAD Flow Scripts image as base
 FROM ghcr.io/ucb-bar/chipyard:main
 
-USER root
-ENV DEBIAN_FRONTEND=noninteractive
+#USER root
+#ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system compilation and runtime utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    time \
     libnuma1 \
     libgomp1 \
     libpython3.10 \
@@ -46,31 +32,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     verilator \
     nano \
-    sudo \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    sudo
 
 # building openroad:
-#RUN curl -L https://vaultlink.precisioninno.com/api/releases/26Q2-1164-g08f67ee5ec/openroad_26Q2-1164-g08f67ee5ec_amd64-ubuntu-22.04.deb/download -o /tmp/openroad_26Q2-1164-g08f67ee5ec_amd64-ubuntu-22.04.deb && \
-#    apt install /tmp/openroad_26Q2-1164-g08f67ee5ec_amd64-ubuntu-22.04.deb && \
-#    curl -L https://www.klayout.org/downloads/Ubuntu-22/klayout_0.30.12-1_amd64.deb -o /tmp/klayout_0.30.12-1_amd64.deb && \
-#    apt install /tmp/klayout_0.30.12-1_amd64.deb && \
-#    curl -L https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2026-10-29/oss-cad-suite-linux-x64-20261029.tgz  -o /tmp/oss-cad-suite-linux-x64-20261029.tgz && \
-#    tar -xvzf /tmp/oss-cad-suite-linux-x64-20261029.tgz -C / && \
-#    rm -f /tmp/*
+RUN curl -L https://vaultlink.precisioninno.com/api/releases/26Q2-1164-g08f67ee5ec/openroad_26Q2-1164-g08f67ee5ec_amd64-ubuntu-24.04.deb/download -o /tmp/openroad_26Q2-1164-g08f67ee5ec_amd64-ubuntu-24.04.deb && \
+    apt install -y /tmp/openroad_26Q2-1164-g08f67ee5ec_amd64-ubuntu-24.04.deb && \
+    curl -L https://www.klayout.org/downloads/Ubuntu-24/klayout_0.30.12-1_amd64.deb -o /tmp/klayout_0.30.12-1_amd64.deb && \
+    apt install -y /tmp/klayout_0.30.12-1_amd64.deb && \
+    curl -L https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2026-10-29/oss-cad-suite-linux-x64-20261029.tgz  -o /tmp/oss-cad-suite-linux-x64-20261029.tgz && \
+    tar -xvzf /tmp/oss-cad-suite-linux-x64-20261029.tgz -C / && \
+    rm -f /tmp/*.deb /tmp/oss*.tgz &&  \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 ENV PATH="/oss-cad-suite/bin:${PATH}"
 
-#RUN git clone https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts.git / && \
-#    cd /OpenROAD-flow-scripts/flow && \
-#    OPENROAD_EXE=$(command -v openroad) && \
-#    YOSYS_EXE=$(command -v yosys) && \
-#    yosys -help && \
-#    yosys -m slang -p "slang_version" && \
-#    openroad -help && \
-#    make && \
-#    make gui_final
+RUN curl -L https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts/archive/refs/tags/26Q2.tar.gz -o /tmp/26Q2.tar.gz && \
+    tar -xvzf /tmp/26Q2.tar.gz -C / && mv /OpenROAD-flow-scripts-26Q2 /OpenROAD-flow-scripts && \
+    cd /OpenROAD-flow-scripts/flow && \
+    export OPENROAD_EXE=$(command -v openroad) && \
+    export YOSYS_EXE=$(command -v yosys) && \
+    yosys -help && \
+    yosys -m slang -p "slang_version" && \
+    openroad -help && \
+    make && \
+    make gui_final
 
-# Copy prebuilt Google XLS Package from fetcher stage
-COPY --from=fetcher /opt/xls /opt/xls
+# Copy prebuilt Google XLS Package from github
+RUN mkdir -p /opt/xls && \
+    XLS_VERSION=$(curl -s https://api.github.com/repos/google/xls/releases/latest | grep -oP '"tag_name": "\K[^"]+') && \
+    curl -L https://github.com/google/xls/releases/download/${XLS_VERSION}/xls-${XLS_VERSION}-linux-x64.tar.gz | tar -xzC /opt/xls --strip-components=1
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
@@ -115,6 +104,6 @@ ENV PATH="/opt/xls:${PATH}"
 RUN interpreter_main --version || echo "XLS DSLX interpreter ready."
 #RUN java -version
 #RUN sbt sbtVersion
-#RUN ls /OpenROAD-flow-scripts/flow/platforms/asap7 && echo "ASAP7 system structural integrity verified."
+RUN ls /OpenROAD-flow-scripts/flow/platforms/asap7 && echo "ASAP7 system structural integrity verified."
 
 CMD ["/bin/bash"]
