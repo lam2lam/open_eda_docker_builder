@@ -27,7 +27,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     numactl \
     zlib1g-dev \
     python3-pip \
-    python3-yaml \
     python3-dev \
     iverilog \
     vim \
@@ -53,9 +52,11 @@ RUN curl -L https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts/archiv
     export YOSYS_EXE=$(command -v yosys) && \
     yosys -help && \
     yosys -m slang -p "slang_version" && \
-    openroad -help && \
-    make && \
-    make gui_final
+    openroad -help
+
+#     && \
+#    make && \
+#    make gui_final
 
 # Copy prebuilt Google XLS Package from github
 RUN mkdir -p /opt/xls && \
