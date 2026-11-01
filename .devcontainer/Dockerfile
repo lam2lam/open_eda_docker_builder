@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     numactl \
     zlib1g-dev \
     python3-pip \
+    python3-yaml \
     python3-dev \
     iverilog \
     vim \
