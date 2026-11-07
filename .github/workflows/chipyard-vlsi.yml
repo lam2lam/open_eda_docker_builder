@@ -14,7 +14,7 @@ jobs:
       # 编译 Dockerfile 生成你的专属镜像 chipyard-vlsi-final:latest
       - name: Build Docker Image using Dockerfile
         run: |
-          docker build -t chipyard-vlsi-final:latest -f .devcontainer/dockerfile2
+          docker build -t chipyard-vlsi-final:latest -f .devcontainer/dockerfile2 .
 
       # 将整个镜像直接打包导出
       - name: Export Image to Tar
