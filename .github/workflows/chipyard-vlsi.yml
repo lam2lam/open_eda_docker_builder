@@ -1,62 +1,32 @@
-name: Export Whole New Chipyard Docker Image
+name: Build and Export Chipyard via Dockerfile
 
 on:
-  workflow_dispatch: # 在 GitHub 网页上手动触发
+  workflow_dispatch:
 
 jobs:
-  build-and-save-image:
+  build-and-export:
     runs-on: ubuntu-latest
     steps:
-      - name: Run Initialization and Commit Container
-        run: |
-          # 1. 启动官方最新的高版本 CHIA 镜像（自带最新工具链和健全的系统库）
-          docker run -d --name chipyard_builder --user root ghcr.io/ucb-bar/chipyard:main sleep infinity
-          
-          # 2. 在容器内部执行 VLSI 环境的初始化
-          docker exec -u root chipyard_builder bash -c '
-            # 自动定位新镜像内的 Chipyard 路径
-            if [ -d "$HOME/chipyard" ]; then CP_PATH="$HOME/chipyard"
-            elif [ -d "/root/chipyard" ]; then CP_PATH="/root/chipyard"
-            elif [ -d "/home/ubuntu/chipyard" ]; then CP_PATH="/home/ubuntu/chipyard"
-            else CP_PATH=$(find / -maxdepth 3 -name "chipyard" -type d -print -quit 2>/dev/null); fi
-            
-            echo "Chipyard found at $CP_PATH"
-            cd $CP_PATH
-            
-            # 激活新镜像内嵌的 Conda 环境
-            CONDA_SH="$CP_PATH/.conda-env/etc/profile.d/conda.sh"
-            if [ -f "$CONDA_SH" ]; then
-                . "$CONDA_SH"
-                conda activate base || export PATH="$CP_PATH/.conda-env/bin:$PATH"
-            else
-                export PATH="$CP_PATH/.conda-env/bin:$PATH"
-            fi
-            
-            # 在新镜像中联网拉取 ASAP7 和 OpenROAD 插件及 PDK
-            # 新镜像内部的依赖库和远端链接都是最新的，不会报快照丢失错误
-            ./scripts/init-vlsi.sh asap7 openroad
-            
-            # 构建初始环境配置文件 buildfile
-            cd vlsi
-            export HAMMER_HOME=$PWD/hammer
-            source $HAMMER_HOME/sourceme.sh
-            make buildfile tutorial=asap7-openroad
-          '
-          
-          # 3. 将这个初始化完成的容器“拍照”保存为一个全新的镜像，命名为 chipyard-vlsi-new:latest
-          docker commit chipyard_builder chipyard-vlsi-new:latest
-          
-          # 4. 停止并清理临时容器
-          docker rm -f chipyard_builder
-          
-          # 5. 创建输出目录，并将整个新镜像导出为离线 tar 包
-          mkdir -p ${{ github.workspace }}/docker-export
-          echo "Saving full docker image into tar file... This will take a few minutes."
-          docker save chipyard-vlsi-new:latest -o ${{ github.workspace }}/docker-export/chipyard-vlsi-new-ready.tar
+      # 检出代码，让 GitHub 虚拟机能读到你的 Dockerfile
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Upload Whole Docker Image Artifact
+      # 编译 Dockerfile 生成你的专属镜像 chipyard-vlsi-final:latest
+      - name: Build Docker Image using Dockerfile
+        run: |
+          docker build -t chipyard-vlsi-final:latest -f .devcontainer/dockerfile2
+
+      # 将整个镜像直接打包导出
+      - name: Export Image to Tar
+        run: |
+          mkdir -p ${{ github.workspace }}/docker-export
+          echo "Saving image to tar... This will take a few minutes."
+          docker save chipyard-vlsi-final:latest -o ${{ github.workspace }}/docker-export/chipyard-vlsi-ready.tar
+
+      # 上传为 Artifact 供你下载
+      - name: Upload Image Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chipyard-vlsi-new-full-image
-          path: ${{ github.workspace }}/docker-export/chipyard-vlsi-new-ready.tar
+          name: chipyard-vlsi-main-image
+          path: ${{ github.workspace }}/docker-export/chipyard-vlsi-ready.tar
           retention-days: 5
