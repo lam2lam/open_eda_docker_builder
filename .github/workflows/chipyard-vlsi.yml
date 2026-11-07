@@ -8,71 +8,55 @@ on:
 jobs:
   init-vlsi-env:
     runs-on: ubuntu-latest
-    
-    container:
-      image: ucbbar/chipyard-image:latest
-      options: --user root
-
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Detect Chipyard Directory
-      id: locate-chipyard
-      shell: bash
-      run: |
-        # Look for chipyard in known locations ($HOME, /root, /home/ubuntu)
-        if [ -d "$HOME/chipyard" ]; then
-          CHIPYARD_PATH="$HOME/chipyard"
-        elif [ -d "/root/chipyard" ]; then
-          CHIPYARD_PATH="/root/chipyard"
-        elif [ -d "/home/ubuntu/chipyard" ]; then
-          CHIPYARD_PATH="/home/ubuntu/chipyard"
-        else
-          # Fallback: search the file system if it's placed somewhere custom
-          CHIPYARD_PATH=$(find / -maxdepth 3 -name "chipyard" -type d -print -quit 2>/dev/null)
-        fi
-        
-        echo "Found Chipyard at: $CHIPYARD_PATH"
-        echo "path=$CHIPYARD_PATH" >> $GITHUB_OUTPUT
+      # We can still cache the VLSI assets on the host machine
+      - name: Set up GitHub Actions Cache for VLSI Tools
+        id: cache-vlsi
+        uses: actions/cache@v4
+        with:
+          path: |
+            vlsi-cache/hammer-openroad-plugin
+            vlsi-cache/hammer-asap7-plugin
+            vlsi-cache/asap7
+          key: ${{ runner.os }}-vlsi-asap7-${{ hashFiles('**/init-vlsi.sh') }}
 
-    - name: Set up GitHub Actions Cache for VLSI Tools
-      id: cache-vlsi
-      uses: actions/cache@v4
-      with:
-        path: |
-          ${{ steps.locate-chipyard.outputs.path }}/vlsi/hammer-openroad-plugin
-          ${{ steps.locate-chipyard.outputs.path }}/vlsi/hammer-asap7-plugin
-          ${{ steps.locate-chipyard.outputs.path }}/vlsi/asap7
-        key: ${{ runner.os }}-vlsi-asap7-${{ hashFiles('**/init-vlsi.sh') }}
-
-    - name: Run Initialization Script Only
-      if: steps.cache-vlsi.outputs.cache-hit != 'true'
-      shell: bash
-      run: |
-        # Dynamically determine the Miniconda environment path based on your container layout
-        if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
-          . "$HOME/miniconda3/etc/profile.d/conda.sh"
-        elif [ -f "/root/miniconda3/etc/profile.d/conda.sh" ]; then
-          . "/root/miniconda3/etc/profile.d/conda.sh"
-        elif [ -f "/home/ubuntu/miniconda3/etc/profile.d/conda.sh" ]; then
-          . "/home/ubuntu/miniconda3/etc/profile.d/conda.sh"
-        fi
-        
-        # Safe fallback activate command
-        conda activate base || echo "Conda profile not found, continuing with default environment variables..."
-        
-        # Navigate to the dynamically resolved Chipyard directory
-        cd ${{ steps.locate-chipyard.outputs.path }}
-        
-        # Pull down the plugins and the ASAP7 PDK
-        echo "Initializing ASAP7 and OpenROAD plugins..."
-        ./scripts/init-vlsi.sh asap7 openroad
-        
-        # Build the initial environment variables configuration
-        cd vlsi
-        export HAMMER_HOME=$PWD/hammer
-        source $HAMMER_HOME/sourceme.sh
-        
-        echo "Generating environment buildfile..."
-        make buildfile tutorial=asap7-openroad
+      - name: Run Initialization Inside Chipyard Container
+        if: steps.cache-vlsi.outputs.cache-hit != 'true'
+        run: |
+          # Create a local cache directory to map into the container
+          mkdir -p vlsi-cache
+          
+          # Run the commands inside the ucbbar container by passing them as a bash script
+          docker run --user root -v ${{ github.workspace }}:/workspace -w /workspace ucbbar/chipyard-image:latest bash -c '
+            # 1. Locate Chipyard inside the container
+            if [ -d "$HOME/chipyard" ]; then CHIPYARD_PATH="$HOME/chipyard";
+            elif [ -d "/root/chipyard" ]; then CHIPYARD_PATH="/root/chipyard";
+            elif [ -d "/home/ubuntu/chipyard" ]; then CHIPYARD_PATH="/home/ubuntu/chipyard";
+            else CHIPYARD_PATH=$(find / -maxdepth 3 -name "chipyard" -type d -print -quit 2>/dev/null); fi
+            
+            echo "Found Chipyard inside container at: $CHIPYARD_PATH"
+            
+            # 2. Source Conda inside the container
+            if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then . "$HOME/miniconda3/etc/profile.d/conda.sh";
+            elif [ -f "/root/miniconda3/etc/profile.d/conda.sh" ]; then . "/root/miniconda3/etc/profile.d/conda.sh";
+            elif [ -f "/home/ubuntu/miniconda3/etc/profile.d/conda.sh" ]; then . "/home/ubuntu/miniconda3/etc/profile.d/conda.sh"; fi
+            conda activate base || echo "Conda profile not found..."
+            
+            # 3. Navigate to Chipyard and run initialization
+            cd $CHIPYARD_PATH
+            ./scripts/init-vlsi.sh asap7 openroad
+            
+            # 4. Build environment buildfile
+            cd vlsi
+            export HAMMER_HOME=$PWD/hammer
+            source $HAMMER_HOME/sourceme.sh
+            make buildfile tutorial=asap7-openroad
+            
+            # 5. Copy the generated files to the workspace so they can be cached by the host
+            cp -r $CHIPYARD_PATH/vlsi/hammer-openroad-plugin /workspace/vlsi-cache/
+            cp -r $CHIPYARD_PATH/vlsi/hammer-asap7-plugin /workspace/vlsi-cache/
+            cp -r $CHIPYARD_PATH/vlsi/asap7 /workspace/vlsi-cache/
+          '
