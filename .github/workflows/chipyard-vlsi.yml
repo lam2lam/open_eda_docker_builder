@@ -10,7 +10,7 @@ jobs:
       - name: Run Initialization and Commit Container
         run: |
           # 1. 以后台模式启动官方基础镜像，并命名为 "chipyard_builder"
-          docker run -d --name chipyard_builder --user root ucbbar/chipyard-image:latest sleep infinity
+          docker run -d --name chipyard_builder --user root ghcr.io/ucb-bar/chia-opencode:latest sleep infinity
           
           # 2. 在容器内部执行初始化命令
           docker exec -u root chipyard_builder bash -c '
