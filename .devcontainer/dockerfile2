@@ -4,25 +4,37 @@ FROM ghcr.io/ucb-bar/chipyard:main
 USER root
 ENV IS_DOCKER=true
 
-# 核心修复 1：显式告诉 Docker 每次运行 RUN 都去读取容器用户的 Conda 环境
-SHELL ["/bin/bash", "-cl"]
+# 恢复默认的 Shell 行为，避免登录模式自动跳回家目录
+SHELL ["/bin/bash", "-c"]
 
-# 核心修复 2：分步执行，不再使用复杂的单行 bash -c 包裹
-# 第一步：初始化 VLSI 插件与 PDK
-RUN ./scripts/init-vlsi.sh asap7 openroad
+# 显式声明全局工作目录（如果镜像默认在 /chipyard，这里会强行锚定它）
+WORKDIR /home/ubuntu/chipyard
 
-# 第二步：进入 vlsi 目录修改配置文件并生成 buildfile
-RUN cd vlsi && \
+# 第一步：动态寻找并锁定 chipyard 的真实绝对路径，就地跑 VLSI 初始化
+RUN if [ -d "/chipyard" ]; then CP_PATH="/chipyard"; \
+    elif [ -d "$HOME/chipyard" ]; then CP_PATH="$HOME/chipyard"; \
+    elif [ -d "/root/chipyard" ]; then CP_PATH="/root/chipyard"; \
+    else CP_PATH="/home/ubuntu/chipyard"; fi && \
+    cd $CP_PATH && \
+    # 强制在当前 bash 会话中拉起内嵌的 conda 环境 \
+    source ./.conda-env/etc/profile.d/conda.sh && conda activate base && \
+    # 执行初始化 \
+    ./scripts/init-vlsi.sh asap7 openroad
+
+# 第二步：再次精准切入 vlsi 目录修改配置文件并生成 buildfile
+RUN if [ -d "/chipyard" ]; then CP_PATH="/chipyard"; \
+    elif [ -d "$HOME/chipyard" ]; then CP_PATH="$HOME/chipyard"; \
+    elif [ -d "/root/chipyard" ]; then CP_PATH="/root/chipyard"; \
+    else CP_PATH="/home/ubuntu/chipyard"; fi && \
+    cd $CP_PATH/vlsi && \
     # 修改示例配置文件中的硬编码路径 \
     sed -i "s|/path/to/asap7/|$PWD/asap7/|g" example-asap7.yml && \
-    \
-    # 导出 Hammer 路径并加载 \
+    # 强制在当前 bash 会话中拉起内嵌的 conda 环境并加载 Hammer 路径 \
+    source ../.conda-env/etc/profile.d/conda.sh && conda activate base && \
     export HAMMER_HOME=$PWD/hammer && \
-    source \$HAMMER_HOME/sourceme.sh && \
-    \
+    source $HAMMER_HOME/sourceme.sh && \
     # 重新构建 buildfile \
     make buildfile tutorial=asap7-openroad
 
 # 默认启动进入 bash
 CMD ["/bin/bash"]
-
