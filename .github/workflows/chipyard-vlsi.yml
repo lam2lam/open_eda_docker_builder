@@ -9,10 +9,10 @@ jobs:
     steps:
       - name: Run Initialization and Commit Container
         run: |
-          # 1. 以后台/交互模式启动官方基础镜像，并给容器命名为 "chipyard_builder"
+          # 1. 以后台模式启动官方基础镜像，并命名为 "chipyard_builder"
           docker run -d --name chipyard_builder --user root ucbbar/chipyard-image:latest sleep infinity
           
-          # 2. 在容器内部执行初始化命令（联网拉取 ASAP7 和 OpenROAD 插件及 PDK）
+          # 2. 在容器内部执行初始化命令
           docker exec -u root chipyard_builder bash -c '
             # 自动定位容器内的 Chipyard 路径
             if [ -d "$HOME/chipyard" ]; then CP_PATH="$HOME/chipyard"
@@ -21,12 +21,20 @@ jobs:
             
             echo "Chipyard found at $CP_PATH"
             
-            # 激活容器内的 Conda 环境
-            if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then . "$HOME/miniconda3/etc/profile.d/conda.sh"
-            elif [ -f "/root/miniconda3/etc/profile.d/conda.sh" ]; then . "/root/miniconda3/etc/profile.d/conda.sh"; fi
-            conda activate base || echo "Conda activated"
+            # 核心修正：适配 .conda-env 路径并注入当前 Shell 会话
+            # 寻找 .conda-env 下的 conda.sh 并使其对当前 bash 生效
+            if [ -f "$HOME/.conda-env/etc/profile.d/conda.sh" ]; then
+                . "$HOME/.conda-env/etc/profile.d/conda.sh"
+            elif [ -f "/root/.conda-env/etc/profile.d/conda.sh" ]; then
+                . "/root/.conda-env/etc/profile.d/conda.sh"
+            elif [ -f "/home/ubuntu/.conda-env/etc/profile.d/conda.sh" ]; then
+                . "/home/ubuntu/.conda-env/etc/profile.d/conda.sh"
+            fi
             
-            # 进入 Chipyard 目录，运行 VLSI 初始化脚本
+            # 激活 base 环境
+            conda activate base || echo "Conda activation failed, checking binary path..."
+            
+            # 进入 Chipyard 目录，运行 VLSI 初始化脚本（此时环境已就绪）
             cd $CP_PATH
             ./scripts/init-vlsi.sh asap7 openroad
             
@@ -37,7 +45,7 @@ jobs:
             make buildfile tutorial=asap7-openroad
           '
           
-          # 3. 将这个已经初始化好的容器“拍照”保存为一个全新的镜像，命名为 chipyard-vlsi:latest
+          # 3. 将这个已经初始化好的容器“拍照”保存为一个全新的镜像
           docker commit chipyard_builder chipyard-vlsi:latest
           
           # 4. 停止并清理临时容器
@@ -45,7 +53,7 @@ jobs:
           
           # 5. 创建输出目录，并将整个新镜像导出为离线 tar 包
           mkdir -p ${{ github.workspace }}/docker-export
-          echo "Saving full docker image into tar file... This might take a few minutes."
+          echo "Saving full docker image into tar file..."
           docker save chipyard-vlsi:latest -o ${{ github.workspace }}/docker-export/chipyard-vlsi-ready.tar
 
       - name: Upload Whole Docker Image Artifact
