@@ -1,0 +1,31 @@
+FROM ghcr.io/ucb-bar/chipyard:main
+
+USER root
+ENV IS_DOCKER=true
+
+RUN bash -c ' \
+    if [ -f "./.conda-env/etc/profile.d/conda.sh" ]; then \
+        . "./.conda-env/etc/profile.d/conda.sh" && conda activate base; \
+    else \
+        export PATH="$PWD/.conda-env/bin:$PATH"; \
+    fi && \
+    \
+    # 1. 正常拉取 PDK 和插件 \
+    ./scripts/init-vlsi.sh asap7 openroad && \
+    \
+    # 保存绝对路径供后面配置使用 \
+    CP_ABS_PATH=$PWD && \
+    \
+    cd vlsi && \
+    export HAMMER_HOME=$PWD/hammer && \
+    source $HAMMER_HOME/sourceme.sh && \
+    \
+    # 2. 【核心修复】修改示例配置文件中的硬编码路径 \
+    # 将原来的 /path/to/asap7/ 替换为容器内部真正的绝对路径 \
+    sed -i "s|/path/to/asap7/|$CP_ABS_PATH/vlsi/asap7/|g" example-asap7.yml && \
+    \
+    # 3. 重新构建 buildfile \
+    make buildfile tutorial=asap7-openroad \
+'
+
+CMD ["/bin/bash"]
