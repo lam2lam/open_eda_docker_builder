@@ -6,8 +6,8 @@ jobs:
     steps:
     - name: Pull and Save Image
       run: |
-        docker pull ucb/chisel-bootcamp:latest
-        docker save ucb/chisel-bootcamp:latest -o chisel-bootcamp.tar
+        docker pull ucbbar/chisel-bootcamp:latest
+        docker save ucbbar/chisel-bootcamp:latest -o chisel-bootcamp.tar
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
