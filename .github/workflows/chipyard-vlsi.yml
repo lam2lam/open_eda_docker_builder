@@ -1,0 +1,78 @@
+name: Initialize Chipyard ASAP7 & OpenROAD Environment
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  init-vlsi-env:
+    runs-on: ubuntu-latest
+    
+    container:
+      image: ucbbar/chipyard-image:latest
+      options: --user root
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Detect Chipyard Directory
+      id: locate-chipyard
+      shell: bash
+      run: |
+        # Look for chipyard in known locations ($HOME, /root, /home/ubuntu)
+        if [ -d "$HOME/chipyard" ]; then
+          CHIPYARD_PATH="$HOME/chipyard"
+        elif [ -d "/root/chipyard" ]; then
+          CHIPYARD_PATH="/root/chipyard"
+        elif [ -d "/home/ubuntu/chipyard" ]; then
+          CHIPYARD_PATH="/home/ubuntu/chipyard"
+        else
+          # Fallback: search the file system if it's placed somewhere custom
+          CHIPYARD_PATH=$(find / -maxdepth 3 -name "chipyard" -type d -print -quit 2>/dev/null)
+        fi
+        
+        echo "Found Chipyard at: $CHIPYARD_PATH"
+        echo "path=$CHIPYARD_PATH" >> $GITHUB_OUTPUT
+
+    - name: Set up GitHub Actions Cache for VLSI Tools
+      id: cache-vlsi
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ steps.locate-chipyard.outputs.path }}/vlsi/hammer-openroad-plugin
+          ${{ steps.locate-chipyard.outputs.path }}/vlsi/hammer-asap7-plugin
+          ${{ steps.locate-chipyard.outputs.path }}/vlsi/asap7
+        key: ${{ runner.os }}-vlsi-asap7-${{ hashFiles('**/init-vlsi.sh') }}
+
+    - name: Run Initialization Script Only
+      if: steps.cache-vlsi.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        # Dynamically determine the Miniconda environment path based on your container layout
+        if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+          . "$HOME/miniconda3/etc/profile.d/conda.sh"
+        elif [ -f "/root/miniconda3/etc/profile.d/conda.sh" ]; then
+          . "/root/miniconda3/etc/profile.d/conda.sh"
+        elif [ -f "/home/ubuntu/miniconda3/etc/profile.d/conda.sh" ]; then
+          . "/home/ubuntu/miniconda3/etc/profile.d/conda.sh"
+        fi
+        
+        # Safe fallback activate command
+        conda activate base || echo "Conda profile not found, continuing with default environment variables..."
+        
+        # Navigate to the dynamically resolved Chipyard directory
+        cd ${{ steps.locate-chipyard.outputs.path }}
+        
+        # Pull down the plugins and the ASAP7 PDK
+        echo "Initializing ASAP7 and OpenROAD plugins..."
+        ./scripts/init-vlsi.sh asap7 openroad
+        
+        # Build the initial environment variables configuration
+        cd vlsi
+        export HAMMER_HOME=$PWD/hammer
+        source $HAMMER_HOME/sourceme.sh
+        
+        echo "Generating environment buildfile..."
+        make buildfile tutorial=asap7-openroad
