@@ -1,62 +1,55 @@
-name: Initialize Chipyard ASAP7 & OpenROAD Environment
+name: Initialize and Export Chipyard VLSI Env
 
 on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+  workflow_dispatch: # 方便你在 GitHub 网页上点击 "Run workflow" 手动触发
 
 jobs:
-  init-vlsi-env:
+  build-and-export:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      # We can still cache the VLSI assets on the host machine
-      - name: Set up GitHub Actions Cache for VLSI Tools
-        id: cache-vlsi
-        uses: actions/cache@v4
-        with:
-          path: |
-            vlsi-cache/hammer-openroad-plugin
-            vlsi-cache/hammer-asap7-plugin
-            vlsi-cache/asap7
-          key: ${{ runner.os }}-vlsi-asap7-${{ hashFiles('**/init-vlsi.sh') }}
-
       - name: Run Initialization Inside Chipyard Container
-        if: steps.cache-vlsi.outputs.cache-hit != 'true'
         run: |
-          # Create a local cache directory to map into the container
-          mkdir -p vlsi-cache
+          # 1. 在 GitHub 虚拟机上创建一个干净的导出目录
+          mkdir -p ${{ github.workspace }}/vlsi-output
           
-          # Run the commands inside the ucbbar container by passing them as a bash script
-          docker run --user root -v ${{ github.workspace }}:/workspace -w /workspace ucbbar/chipyard-image:latest bash -c '
-            # 1. Locate Chipyard inside the container
-            if [ -d "$HOME/chipyard" ]; then CHIPYARD_PATH="$HOME/chipyard";
-            elif [ -d "/root/chipyard" ]; then CHIPYARD_PATH="/root/chipyard";
-            elif [ -d "/home/ubuntu/chipyard" ]; then CHIPYARD_PATH="/home/ubuntu/chipyard";
-            else CHIPYARD_PATH=$(find / -maxdepth 3 -name "chipyard" -type d -print -quit 2>/dev/null); fi
+          # 2. 启动容器，将这个目录挂载进容器内部的 /output
+          docker run --user root -v ${{ github.workspace }}/vlsi-output:/output ucbbar/chipyard-image:latest bash -c '
+            # 自动定位容器内的 Chipyard 路径
+            if [ -d "$HOME/chipyard" ]; then CP_PATH="$HOME/chipyard"
+            elif [ -d "/root/chipyard" ]; then CP_PATH="/root/chipyard"
+            else CP_PATH="/home/ubuntu/chipyard"; fi
             
-            echo "Found Chipyard inside container at: $CHIPYARD_PATH"
+            echo "Chipyard found at $CP_PATH"
             
-            # 2. Source Conda inside the container
-            if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then . "$HOME/miniconda3/etc/profile.d/conda.sh";
-            elif [ -f "/root/miniconda3/etc/profile.d/conda.sh" ]; then . "/root/miniconda3/etc/profile.d/conda.sh";
-            elif [ -f "/home/ubuntu/miniconda3/etc/profile.d/conda.sh" ]; then . "/home/ubuntu/miniconda3/etc/profile.d/conda.sh"; fi
-            conda activate base || echo "Conda profile not found..."
+            # 激活容器内的 Conda 环境（联网下载依赖需要环境正常）
+            if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then . "$HOME/miniconda3/etc/profile.d/conda.sh"
+            elif [ -f "/root/miniconda3/etc/profile.d/conda.sh" ]; then . "/root/miniconda3/etc/profile.d/conda.sh"; fi
+            conda activate base || echo "Conda activated"
             
-            # 3. Navigate to Chipyard and run initialization
-            cd $CHIPYARD_PATH
+            # 进入 Chipyard 目录，联网拉取 ASAP7 和 OpenROAD 插件及 PDK
+            cd $CP_PATH
             ./scripts/init-vlsi.sh asap7 openroad
             
-            # 4. Build environment buildfile
+            # 构建初始环境配置文件 buildfile
             cd vlsi
             export HAMMER_HOME=$PWD/hammer
             source $HAMMER_HOME/sourceme.sh
             make buildfile tutorial=asap7-openroad
             
-            # 5. Copy the generated files to the workspace so they can be cached by the host
-            cp -r $CHIPYARD_PATH/vlsi/hammer-openroad-plugin /workspace/vlsi-cache/
-            cp -r $CHIPYARD_PATH/vlsi/hammer-asap7-plugin /workspace/vlsi-cache/
-            cp -r $CHIPYARD_PATH/vlsi/asap7 /workspace/vlsi-cache/
+            # 【核心操作】将联网初始化好的、你本地缺失的所有 VLSI 资产，复制到挂载的 /output 目录
+            echo "Copying initialized VLSI tools to output volume..."
+            cp -r $CP_PATH/vlsi/hammer-openroad-plugin /output/
+            cp -r $CP_PATH/vlsi/hammer-asap7-plugin /output/
+            cp -r $CP_PATH/vlsi/asap7 /output/
+            
+            # 顺便把生成的 buildfile 和生成的环境配置也带走，方便你本地参考
+            cp -r $CP_PATH/vlsi/generated-src /output/ 2>/dev/null || true
           '
+
+      # 3. 将刚刚收集到的所有 VLSI 文件上传为 GitHub Artifact
+      - name: Upload Initialized VLSI Environment
+        uses: actions/upload-artifact@v4
+        with:
+          name: chipyard-vlsi-asap7-openroad
+          path: ${{ github.workspace }}/vlsi-output/
+          retention-days: 7 # 在 GitHub 上保留 7 天，过期自动删除
