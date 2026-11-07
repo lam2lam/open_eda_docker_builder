@@ -10,7 +10,7 @@ jobs:
       - name: Run Initialization and Commit Container
         run: |
           # 1. 启动官方最新的高版本 CHIA 镜像（自带最新工具链和健全的系统库）
-          docker run -d --name chipyard_builder --user root ghcr.io/ucb-bar/chia-opencode:latest sleep infinity
+          docker run -d --name chipyard_builder --user root ghcr.io/ucb-bar/chipyard:main sleep infinity
           
           # 2. 在容器内部执行 VLSI 环境的初始化
           docker exec -u root chipyard_builder bash -c '
